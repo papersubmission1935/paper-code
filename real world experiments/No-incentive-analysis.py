@@ -46,8 +46,11 @@ def estimators(df, X):
   Y0_naive = df.loc[df['T']==0,'fan_mean'].mean()
 
   logit = LogisticRegression(max_iter=1000).fit(X, df['T'])
+  print("\n=== Propensity Model Coefficients ===")
+  print("LogisticRegression.coef_:\n", logit.coef_)
+  print("Feature names:\n", list(X.columns))
   df['e_hat_logit'] = logit.predict_proba(X)[:,1]
-  df['strata3'] = pd.qcut(df['e_hat_logit'],3,labels=False,duplicates='drop')
+
   rf1 = RandomForestRegressor(random_state=42).fit(X.loc[df['T']==1], df.loc[df['T']==1,'sci_mean'])
   rf0 = RandomForestRegressor(random_state=42).fit(X.loc[df['T']==0], df.loc[df['T']==0,'fan_mean'])
   N = len(df)
@@ -70,6 +73,10 @@ def estimators(df, X):
 
   # IPW/AIPW with RF PS
   rf_ps = RandomForestClassifier(random_state=42).fit(X, df['T'])
+
+  print("\nRandomForestClassifier.feature_importances_:\n",
+          rf_ps.feature_importances_)
+  print("Feature names:\n", list(X.columns))
   e_rf = rf_ps.predict_proba(X)[:,1]
   df['e_hat_rf'] = e_rf
   ipw_s_rf = np.mean(df['T']*df['sci_mean']/e_rf)
@@ -81,8 +88,6 @@ def estimators(df, X):
   methods = [
       ('True',Y1_true,Y0_true),
       ('Naive',Y1_naive,Y0_naive),
-      ('Strat3',Y1_strat,Y0_strat),
-      ('Exact',Y1_exact,Y0_exact),
       ('PSM_ATT',Y1_att,Y0_att),
       ('IPW_Logit',ipw_s_logit,ipw_f_logit),
       ('AIPW_Logit',aipw_s_logit,aipw_f_logit),
@@ -165,11 +170,13 @@ def bootstrap_variance(df, X, B=200, random_state=None):
     # compute variances across the B replications
     var_Y1 = boot[:, :, 0].var(axis=0, ddof=1)
     var_Y0 = boot[:, :, 1].var(axis=0, ddof=1)
+    var_ATE = (boot[:, :, 0]-boot[:, :, 1]).var(axis=0, ddof=1)
 
     var_df = pd.DataFrame({
         'Method': methods,
         'Var_Y1': var_Y1,
-        'Var_Y0': var_Y0
+        'Var_Y0': var_Y0,
+        'Var_ATE': var_ATE
     })
     return var_df
 var_estimates = bootstrap_variance(df, X, B=200, random_state=42)
